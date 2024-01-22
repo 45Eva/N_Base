@@ -175,6 +175,26 @@ Element Inverse(const Element& field) {
     return result;
 }
 
+// Піднесення до степеню  ??????????
+Element powerByGorner(const Element& A, const Element& C) {
+    // Ініціалізуємо новий масив У з одиницями
+    Element U;
+    U.fill(true);
+
+    // Проходимо по всім коміркам масиву C від 172 до 0
+    for (int i = size - 1; i >= 0; --i) {
+
+        // Підносимо U до квадрату
+        U = Squere(U);
+        // Якщо поточна комірка масиву C дорівнює одиниці,
+        // то множимо U на масив A
+        if (C[i]) {
+            U = Multiply(U, A);
+        }
+    }
+
+    return U;
+}
 
 
 
@@ -283,7 +303,12 @@ int main() {
     std::cout << "A ^ 2  :" << std::endl;
     printElement(Correct_OutPut(squere));
 
-    //Піднесення до степеня  ?????????
+    
+    //Піднесення до степеня  ????????????????
+    Element power;
+    power = powerByGorner(A, C);
+    std::cout << "A ^ C  :" << std::endl;
+    printElement(Correct_OutPut(power));
 
 
 
