@@ -1,50 +1,43 @@
 #include <iostream>
 #include <array>
 #include <limits>
+#include <cmath>
+//#include <gmp.h>
 
 const size_t size = 173;
+
 using Element = std::array<bool, size>;
-//Мультиплікативна матриця
-std::array<Element, size> multiplicativeMatrix;
-using Matrix = std::array<Element, size>;
 
-void MultiplicativeMatrix() {
-    int p = 2 * size + 1;
-    std::array<int, size> array;
-    array[0] = 1;
-
-    // Fill the array with the appropriate values
-    for (size_t i = 1; i < size; ++i) {
-        array[i] = (array[i - 1] * 2) % p;
-    }
-
-    // Initialize the multiplicative matrix
-    for (size_t i = 0; i < size; ++i) {
-        for (size_t j = 0; j < size; ++j) {
-            int two_i = array[i];
-            int two_j = array[j];
-
-            // Check the conditions to determine the value for the multiplicative matrix
-            if ((two_i + two_j) % p == 1 ||
-                (two_i - two_j + p) % p == 1 ||
-                ((p - two_i) + two_j) % p == 1 ||
-                ((p - two_i) - two_j + p) % p == 1) {
-                multiplicativeMatrix[i][j] = true; // 1 in binary
-            }
-            else {
-                multiplicativeMatrix[i][j] = false; // 0 in binary
-            }
-        }
-    }
+void createZeroElement(Element& coefficients) {
+    coefficients.fill(false);
 }
 
-void createCustomElement(Element& coefficients, const std::array<size_t, size>& coefArray, size_t coefCount) {
+// Функція для перевертання масиву як того потребує стандарт 
+Element Correct_OutPut(const Element& arr) {
+    Element reversedArray;
+
+    for (size_t i = 0; i < size; ++i) {
+        reversedArray[i] = arr[size - i - 1];
+    }
+
+    return reversedArray;
+}
+
+/*void createCustomElement(Element& coefficients, const std::array<size_t, size>& coefArray, size_t coefCount) {
     coefficients.fill(false);
 
     for (size_t i = 0; i < coefCount; ++i) {
         if (coefArray[i] < size) {
             coefficients[coefArray[i]] = true;
         }
+    }
+} */
+
+void createCustomElement(Element& coefficients, const std::string& coefString) {
+    coefficients.fill(false);
+
+    for (size_t i = 0; i < size && i < coefString.length(); ++i) {
+        coefficients[size - i - 1] = (coefString[i] == '1');
     }
 }
 
@@ -81,14 +74,17 @@ bool Const_0(Element& field_element) {
     return true; // Всі елементи дорівнюють нулю
 }
 
-// Функція для перевірки, чи всі елементи масиву дорівнлюють одиниці. (Нейтральние ел. по * ) ?111..11 ?
+// Функція для перевірки, чи в першому елементі масиву стоїть одиниця. (Нейтральний елемент по * )
 bool Const_1(Element& field_element) {
-    for (bool element : field_element) {
-        if (!element) {
-            return false; // Знайдено елемент, не дорівнює одиниці
+    if (field_element.size() > 0 && field_element[0]) {
+        for (size_t i = 1; i < field_element.size(); ++i) {
+            if (field_element[i]) {
+                return false; // Знайдено елемент, не дорівнює нулю
+            }
         }
+        return true; // Перший елемент дорівнює одиниці, а всі інші - нули
     }
-    return true; // Всі елементи дорівнюють одиниці
+    return false; // Перший елемент не дорівнює одиниці або масив порожній
 }
 
 // Функція для додавання двох елементів поля
@@ -100,181 +96,92 @@ Element Add(Element& field1, Element& field2) {
     return result;
 }
 
-
-// Функція для піднесення до квадрата елемента поля
-Element Square(const Element& element) {
+// Множення елементів поля 
+Element Multiply(const Element& field1, const Element& field2) {
     Element result;
-    // Циклічний зсув вправо компонентів векторного зображення елемента
-    for (size_t i = size - 1; i > 0; i--) {
-        result[i - 1] = element[i];
+    result.fill(false); // Initialize the result to zero
+
+    std::array<bool, (size * 2) - 1> temp;
+    temp.fill(false);
+
+    for (std::size_t i = 0; i < size; ++i) {
+        for (std::size_t j = 0; j < size; ++j) {
+            temp[i + j] ^= field1[i] & field2[j];
+        }
     }
-    // Переміщення останнього значення на початок
-    result[size - 1] = element[0];
+
+    // Define the modulus polynomial
+    std::array<bool, (size * 2) - 1> mod_p;
+    mod_p.fill(false);
+    mod_p[0] = true;
+    mod_p[1] = true;
+    mod_p[2] = true;
+    mod_p[10] = true;
+    mod_p[173] = true;
+
+    for (std::size_t i = (size * 2) - 2; i >= size; --i) {
+        if (temp[i]) {
+            for (std::size_t j = 0; j < size; ++j) {
+                temp[i - size + j] ^= mod_p[j];
+            }
+        }
+    }
+
+    // Copy the result to the output array
+    for (std::size_t i = 0; i < size; ++i) {
+        result[i] = temp[i];
+    }
+
     return result;
 }
 
-// Функція для обчислення сліду елемента поля у нормальному базисі
-bool Trace(const Element& element) {
+//Піднесення до квадрату ел. поля 
+Element Squere(const Element& field1) {
+    Element result;
+    result.fill(false);
+
+    result = Multiply(field1, field1);
+
+    return result;
+}
+
+
+//Обчислення сліду
+bool Trace(const Element& field) {
+    Element temp = field;
     bool trace = false;
-    // Обчислення сліду як XOR всіх коефіцієнтів у нормальному базисі
-    for (bool value : element) {
-        trace ^= value; // XOR
+
+    for (std::size_t i = 0; i < size; ++i) {
+
+        trace ^= temp[i];
+        temp = Squere(temp);
     }
+
     return trace;
 }
 
-// Циклічні зсуви ел.поля 
-// Функція зсуву ліворуч
-Element Left_Shift(const Element& element, int positions) {
-    Element result;
-    for (size_t i = 0; i < size; ++i) {
-        result[i] = element[(i + positions) % size];
-    }
-    return result;
-}
+//Обернений елемент за множенням :
+Element Inverse(const Element& field) {
+    Element result = field;;
+    Element temp = field;
 
-// Функція зсуву праворуч
-Element Right_Shift(const Element& element, int positions) {
-    Element result;
-    for (size_t i = 0; i < size; ++i) {
-        result[i] = element[(i - positions + size) % size];
+    for (size_t i = 0; i < size - 2; ++i) {
+        temp = Squere(temp);
+        result = Multiply(result, temp);
     }
-    return result;
-}
 
-// Функція для транспонування матриці
-Matrix Transpose(const Matrix& matrix) {
-    Matrix transposed;
-    for (size_t i = 0; i < size; ++i) {
-        for (size_t j = 0; j < size; ++j) {
-            transposed[i][j] = matrix[j][i];
-        }
-    }
-    return transposed;
-}
-
-// Функція для множення елементів
-Element mirror(const Element& element) {
-    Element  result;
-    for (int i = 0; i < size; i++) {
-        result[size - 1 - i] = element[i];
-    }
+    result = Squere(result);
 
     return result;
 }
 
-Element Multiply(const Element& A, const Element& B)
-{
-    Element result;
 
-    Element u = mirror(A);
-    Element v = mirror(B);
-    Element temp;
-
-
-    for (int i = 0; i < size; ++i) {
-
-
-        for (int j = 0; j < size; j++) {
-
-            int s = 0;
-            for (int k = 0; k < size; k++) {
-                s += u[k] * multiplicativeMatrix[j][k];
-            }
-            temp[j] = s & 1;
-        }
-        int ss = 0;
-        for (int j = 0; j < size; j++) {
-            int s = 0;
-            for (int k = 0; k < size; k++) {
-                s += temp[k] * v[k];
-            }
-            ss += s & 1;
-        }
-
-
-
-        u = Left_Shift(u, 1);
-        v = Left_Shift(v, 1);
-
-        result[i] = ss & 1;
-    }
-
-    result = Right_Shift(Square(result), 1);
-    return result;
-}
-
-// Функція для піднесення до квадрата елемента поля
-Element Square_1(const Element& element) {
-    Element result;
-    result = Multiply(element, element);
-    return result;
-}
-
-
-// Піднесення до степеня ел.поля   ????????
-/*Element Power(const Element& base,const Element& power )
- {
-    Element result;
-    result.fill(true);
-    Element temp = base;
-
-    for (int i = 0; i < size; i++) {
-        if (power[i] & 1) {
-            result = Multiply(result, temp);
-        }
-        temp = Square(temp);
-    }
-
-    return result;
-}*/
-
-// Оберненого ел. за множенням 
-/*Element Inverse(const Element& element)
-{
-    Element beta = element;
-
-    int k = 1;
-    std::string m_binary = "10101100";   // m - 1 = 172   10101100
-
-    for (int i = 0; i < 8; ++i)
-    {
-        Element original_beta = beta;
-
-        for (int j = 0; j < k; ++j)
-        {
-            beta = Square_1(beta);
-        }
-
-        beta = Multiply(beta, original_beta);
-        k *= 2;
-
-        if (m_binary[i] == '1')
-        {
-            Element squared_beta = Square_1(beta);
-            beta = Multiply(squared_beta, element);
-            ++k;
-        }
-    }
-
-    beta = Square_1(beta);
-    return beta;
-} */
 
 
 int main() {
-    // Ініціалізація мультиплікативної матрицці
-    MultiplicativeMatrix();
 
-    // Виведення матриці 
-   /* for (size_t i = 0; i < size; ++i) {
-        for (size_t j = 0; j < size; ++j) {
-            std::cout << multiplicativeMatrix[i][j] << " ";
-        }
-        std::cout << std::endl;
-    } */
-
-    Element A;
+    // Якщо вводити "ручками" код  
+   /* Element A;
     Element B;
     Element C;
     std::array<size_t, size> coefArrayA;
@@ -304,7 +211,7 @@ int main() {
         coefArrayC[indexC++] = coef;
     }
 
-    // створення ел. поля 
+    // створення ел. поля
     createCustomElement(A, coefArrayA, indexA);
     createCustomElement(B, coefArrayB, indexB);
     createCustomElement(C, coefArrayC, indexC);
@@ -316,7 +223,7 @@ int main() {
     std::cout << "Element C:" << std::endl;
     printElement(C);
 
-    // перетворення ел. поля у коефіцієнти 
+    // перетворення ел. поля у коефіцієнти
     std::array<size_t, size> coefArrayResultA;
     size_t arraySizeA;
     toCoefficientArray(A, coefArrayResultA, arraySizeA);
@@ -334,98 +241,68 @@ int main() {
     std::cout << "Coefficient array for B:" << std::endl;
     printCoef(coefArrayResultB, arraySizeB);
     std::cout << "Coefficient array for C:" << std::endl;
-    printCoef(coefArrayResultC, arraySizeC);
+    printCoef(coefArrayResultC, arraySizeC); */
+
+    // Захаркодити елементи 
+
+    Element A;
+    Element B;
+    Element C;
+    std::string coefStringA = "01011110111011110110101110000001101000010111011101110110001011111000110110001000110011101011110000111100000001001011001011000001101110001011000001101111001111010111010101000";
+    std::string coefStringB = "11110100001000011011011011001010111010100100111010110001101011011011000011000001010111001000100101010100111110001001000001110001100110110111111100010001100010110010111010111";
+    std::string coefStringC = "01011000100001011001110101011110000011011010000111100010010000100110101110001001110100000011111001011110001000011011001111101001011011000110011110001000111101111100101110110";
+
+    // створення ел. поля
+    createCustomElement(A, coefStringA);
+    createCustomElement(B, coefStringB);
+    createCustomElement(C, coefStringC);
 
     //Перевірка функції чи є ел. нулем
-    std::cout << "Const 0 for A ? :" << std::endl;
+    std::cout << "Const 0 ? :" << std::endl;
     std::cout << (Const_0(A) ? "True" : "False") << std::endl;
 
     //Перевірка функції чи є ел. одиницею
-    std::cout << "Const 1 for B ? :" << std::endl;
+    std::cout << "Const 1 ? :" << std::endl;
     std::cout << (Const_1(B) ? "True" : "False") << std::endl;
 
     //Додавання двох елементів поля 
     Element add;
     add = Add(A, B);
     std::cout << "A + B  :" << std::endl;
-    printElement(add);
-    std::array<size_t, size> coefArrayResult_add;
-    size_t arraySize_add;
-    toCoefficientArray(add, coefArrayResult_add, arraySize_add);
+    printElement(Correct_OutPut(add));
 
-    std::cout << "Coefficient array for A + B:" << std::endl;
-    printCoef(coefArrayResult_add, arraySize_add);
+    //Множення елементів поля 
+    Element mul;
+    mul = Multiply(A, B);
+    std::cout << "A * B  :" << std::endl;
+    printElement(Correct_OutPut(mul));
 
     //Піднесення до квадрату ел. поля 
-    Element squared = Square(A);
-    std::cout << "Squared element: " << std::endl;
-    printElement(squared);
-    std::array<size_t, size> coefArrayResult_squared;
-    size_t arraySize_squared;
-    toCoefficientArray(squared, coefArrayResult_squared, arraySize_squared);
+    Element squere;
+    squere = Squere(A);
+    std::cout << "A ^ 2  :" << std::endl;
+    printElement(Correct_OutPut(squere));
 
-    std::cout << "Coefficient array for A ^ 2 :" << std::endl;
-    printCoef(coefArrayResult_squared, arraySize_squared);
+    //Піднесення до степеня  ?????????
 
-    //Обчислення сліду ел. поля 
-    bool traceA = Trace(A);
-    std::cout << "Trace of the element A : " << traceA << std::endl;
-    bool traceB = Trace(B);
-    std::cout << "Trace of the element B: " << traceB << std::endl;
-    bool traceC = Trace(C);
-    std::cout << "Trace of the element C: " << traceC << std::endl;
 
-    // Зсуви 
-    // Зсув ліворуч
-    Element shiftedLeft = Left_Shift(A, 3);
-    // Зсув праворуч
-    Element shiftedRight = Right_Shift(A, 2);
-    // Виводимо результати зсуву
-    for (size_t i = 0; i < size; ++i) {
-        std::cout << shiftedLeft[i] << " ";
-    }
-    std::cout << std::endl;
 
-    for (size_t i = 0; i < size; ++i) {
-        std::cout << shiftedRight[i] << " ";
-    }
-    std::cout << std::endl;
 
-    // Множення ел. поля 
-    Element mul = Multiply(A, B);
-    std::cout << "A * B: " << std::endl;
-    printElement(mul);
-    std::array<size_t, size> coefArrayResult_mul;
-    size_t arraySize_mul;
-    toCoefficientArray(mul, coefArrayResult_mul, arraySize_mul);
+    //Обчислення сліду
+    bool trace_A = Trace(A);
+    std::cout << "The trace of the element A is: " << (trace_A ? "true" : "false") << std::endl;
 
-    std::cout << "Coefficient array for A * B :" << std::endl;
-    printCoef(coefArrayResult_mul, arraySize_mul);
+    bool trace_B = Trace(B);
+    std::cout << "The trace of the element B is: " << (trace_B ? "true" : "false") << std::endl;
 
-    //Піднесення до степеня 
-   /* std::size_t power = 10 ;
-    Element powe = Power(A, power);
-    std::cout << "A ^ B  :" << std::endl;
-    printElement(powe);
-    std::array<size_t, size> coefArrayResult_powe;
-    size_t arraySize_powe;
-    toCoefficientArray(powe, coefArrayResult_powe, arraySize_powe);
+    //Обернений елмент за множенням 
+    Element inverse;
+    inverse = Inverse(A);
+    std::cout << "A ^ (-1)  :" << std::endl;
+    printElement(Correct_OutPut(inverse));
 
-    std::cout << "Coefficient array for A ^ B :" << std::endl;
-    printCoef(coefArrayResult_powe, arraySize_powe);  */
+    //Тестування 
 
-    // Обернений ел. за множенням 
-   /* Element verse = Inverse(A);
-    std::cout << "A ^ (-1): " << std::endl;
-    printElement(verse);
-    std::array<size_t, size> coefArrayResult_verse;
-    size_t arraySize_verse;
-    toCoefficientArray(verse, coefArrayResult_verse, arraySize_verse);
-
-    std::cout << "Coefficient array for A ^ (-1) :" << std::endl;
-    printCoef(coefArrayResult_verse, arraySize_verse); */
-
-    // Тестування : 
     //(a + b) * c = b*c + c*a
     std::cout << "Testting : (a + b) * c = b*c + c*a " << std::endl;
     Element test1;
@@ -452,5 +329,10 @@ int main() {
     printCoef(coefArrayResult_test2, arraySize_test2);
 
 }
+
+
+
+
+
 
 
